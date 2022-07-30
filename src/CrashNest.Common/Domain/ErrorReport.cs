@@ -1,5 +1,8 @@
-﻿namespace CrashNest.Common.Domain {
+﻿using CrashNest.Common.Attributes;
 
+namespace CrashNest.Common.Domain {
+
+    [TableName("errorreport")]
     public class ErrorReport {
 
         /// <summary>
