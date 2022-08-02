@@ -2,7 +2,7 @@
 
 namespace CrashNest.Common.Domain {
 
-    [TableName("errorreport")]
+    [TableName ( nameof ( ErrorReport ) )]
     public class ErrorReport {
 
         /// <summary>
@@ -29,11 +29,6 @@ namespace CrashNest.Common.Domain {
         /// Content of stack trace.
         /// </summary>
         public string StackTrace { get; set; } = "";
-
-        /// <summary>
-        /// Information about environment and so on.
-        /// </summary>
-        public ErrorReportMetadata? Metadata { get; set; }
 
     }
 

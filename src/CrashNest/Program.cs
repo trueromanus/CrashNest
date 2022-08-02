@@ -3,7 +3,6 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder ( args );
 
 builder.Services.AddControllers ();
-
 builder.Services.AddEndpointsApiExplorer ();
 builder.Services.AddSwaggerGen (
     options => {
@@ -26,6 +25,7 @@ builder.Services.AddSwaggerGen (
         );
     }
 );
+ServiceRegistration.RegistrateServices ( builder.Services );
 
 var app = builder.Build ();
 

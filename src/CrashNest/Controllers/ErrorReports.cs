@@ -1,5 +1,5 @@
 ﻿using CrashNest.Attributes;
-using CrashNest.Common.Domain;
+using CrashNest.Common.RequestModels;
 using CrashNest.Common.ResponseModels;
 using CrashNest.Common.Storage;
 using Microsoft.AspNetCore.Mvc;
@@ -15,19 +15,19 @@ namespace CrashNest.Controllers {
             m_storageContext = storageContext ?? throw new ArgumentNullException ( nameof ( storageContext ) );
         }
 
-        [HttpPost ( "save" )]
-        public async Task<ReportResultModel> Save ( [FromBody, RequiredParameter] ErrorReport errorReport ) {
-            if ( errorReport == null ) throw new ArgumentNullException ( nameof ( errorReport ) );
+        [HttpPost ( "report" )]
+        public async Task<ReportResultModel> Save ( [FromBody, RequiredParameter] RegisterReportModel model ) {
+            if ( model == null ) throw new ArgumentNullException ( nameof ( model ) );
 
             try {
-                await m_storageContext.AddOrUpdate ( errorReport );
+                model.Report.Id = Guid.Empty;
+                await m_storageContext.AddOrUpdate ( model.Report );
                 return new ReportResultModel ( "", true );
             } catch ( Exception exception ) {
                 if ( exception is ArgumentException ) return new ReportResultModel ( exception.Message, false );
 
                 return new ReportResultModel ( "Error while processing request.", false );
             }
-
         }
 
     }

@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CrashNest.Common\CrashNest.Common.csproj" />
+    <ProjectReference Include="..\CrashNest.Storage\CrashNest.Storage.csproj" />
   </ItemGroup>
 
 </Project>

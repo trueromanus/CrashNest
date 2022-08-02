@@ -9,13 +9,26 @@ using System.Reflection;
 namespace CrashNest.Storage.PostgresStorage {
 
     /// <summary>
+    /// This class need for CU operations where model mapped to sql values.
+    /// </summary>
+    public class PostgresCompilerWithoutBraces : PostgresCompiler {
+
+        /// <summary>
+        /// This method overrides for stay all identifiers as is (test can't be turn on to "test").
+        /// </summary>
+        /// <param name="value">Identifier.</param>
+        public override string WrapValue ( string value ) => value;
+
+    }
+
+    /// <summary>
     /// Storage context for postgres database.
     /// </summary>
     public class StorageContext : IStorageContext {
 
-        private static readonly PostgresCompiler m_compiler = new ();
+        private static readonly PostgresCompilerWithoutBraces m_compilerWithoutBraces = new ();
 
-        private readonly string m_connectionString = "";
+        private readonly string m_connectionString = "Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=test";
 
         public async Task ExecuteNonResult ( string command, IDictionary<string, object> parameters ) {
             await using var connection = new NpgsqlConnection ( m_connectionString );
@@ -50,19 +63,40 @@ namespace CrashNest.Storage.PostgresStorage {
             var idProperty = itemType.GetProperty ( "Id" );
             if (idProperty == null) throw new ArgumentNullException ( $"The element {item.GetType ().Name} does not have a Id property!" );
 
-            var query = new Query ( tableName );
-
             var idValue = GetIdValueForItem ( item, idProperty );
+
             var isNew = idValue == Guid.Empty;
-            if ( isNew ) {
-                query.AsInsert ( item );
-            } else {
-                query.Where ( "id", idValue ).AsUpdate ( item );
+
+            var values = new Dictionary<string, object> ();
+            var properties = itemType.GetProperties ( BindingFlags.Public | BindingFlags.Instance );
+            if ( isNew ) properties = properties.Where ( a => a.Name != "Id" ).ToArray ();
+
+            var iterator = 0;
+            foreach ( var property in properties ) {
+                var value = property.GetGetMethod ()?.Invoke ( item, null ) ?? "NULL";
+                values[$"@_param{iterator}"] = value is Enum ? Convert.ToInt32(value) : value;
+                iterator++;
             }
 
-            var result = m_compiler.Compile ( query );
+            var valueAliases = string.Join(
+                ", ",
+                Enumerable
+                    .Repeat ( "", properties.Count () )
+                    .Select ( ( _, i ) => $"@_param{i}" )
+                    .ToArray ()
+            );
 
-            await ExecuteNonResult ( result.Sql, result.NamedBindings );
+            if ( isNew ) {
+                await ExecuteNonResult (
+                    $"INSERT INTO {tableName} ({string.Join(", ",properties.Select(a => a.Name))}) VALUES ({valueAliases})",
+                    values
+                );
+            } else {
+                await ExecuteNonResult (
+                    $"UPDATE {tableName} SET {string.Join ( ", ", properties.Select ( (a, i) => a.Name + $" = @_param{i}" ) )} WHERE Id = '{idValue}'",
+                    values
+                );
+            }
         }
 
         private static Guid GetIdValueForItem<T> ( T item, PropertyInfo idProperty ) {
