@@ -1,4 +1,8 @@
+using CrashNest.Storage.Migrator;
 using Microsoft.OpenApi.Models;
+
+var migrator = new Migrator ();
+await migrator.ApplyMigrations ();
 
 var builder = WebApplication.CreateBuilder ( args );
 

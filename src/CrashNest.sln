@@ -7,7 +7,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CrashNest", "CrashNest\Cras
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CrashNest.Common", "CrashNest.Common\CrashNest.Common.csproj", "{7CA50B40-1692-4F73-922C-AE232EE696E8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrashNest.Storage", "CrashNest.Storage\CrashNest.Storage.csproj", "{C353C9BE-3FE2-4139-97D3-D5F339CBD396}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CrashNest.Storage", "CrashNest.Storage\CrashNest.Storage.csproj", "{C353C9BE-3FE2-4139-97D3-D5F339CBD396}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{B78AE937-C66D-46FD-BB94-D740061C1F12}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
