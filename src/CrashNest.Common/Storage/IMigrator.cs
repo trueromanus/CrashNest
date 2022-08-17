@@ -19,13 +19,13 @@
         /// Revert for migration specified in id parameter.
         /// </summary>
         /// <param name="id">Migration Identifier.</param>
-        Task RevertToMigration ( string id );
+        Task RevertToMigration ( int id );
 
         /// <summary>
         /// Revert only single migration.
         /// </summary>
         /// <param name="id">Migration Identifier.</param>
-        Task RevertSingleMigration ( string id );
+        Task RevertSingleMigration ( int id );
 
     }
 

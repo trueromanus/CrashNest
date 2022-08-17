@@ -58,8 +58,15 @@ CREATE TABLE IF NOT EXISTS migrations(
             await cmd.ExecuteNonQueryAsync ();
         }
 
-        public async Task ApplyMigrations () {
-            await InitiateConnection ();
+        private async Task DeleteMigrationRecord ( int migrationId ) {
+            await using var cmd = new NpgsqlCommand ( "DELETE FROM migrations WHERE timestamp = @_param1", m_connection, m_transaction );
+
+            cmd.Parameters.AddWithValue ( "@_param1", migrationId );
+
+            await cmd.ExecuteNonQueryAsync ();
+        }
+
+        private async Task<HashSet<int>> GetAppliedMigrations() {
             await using var cmd = new NpgsqlCommand ( "SELECT timestamp FROM migrations ORDER BY timestamp ASC", m_connection, m_transaction );
             using var reader = await cmd.ExecuteReaderAsync ();
             HashSet<int> appliedMigration = new ();
@@ -67,8 +74,11 @@ CREATE TABLE IF NOT EXISTS migrations(
                 appliedMigration.Add ( reader.GetInt32 ( 0 ) );
             }
             await reader.CloseAsync ();
+            return appliedMigration;
+        }
 
-            var migrations = typeof ( Migration ).Assembly.GetTypes ()
+        private static IEnumerable<MigrationClassModel> GetMigrationClasses() {
+            return typeof ( Migration ).Assembly.GetTypes ()
                 .Where ( a => a.IsSubclassOf ( typeof ( Migration ) ) )
                 .Select (
                     a => {
@@ -79,7 +89,7 @@ CREATE TABLE IF NOT EXISTS migrations(
                         var description = arguments.ElementAt ( 1 );
                         var issue = arguments.Count () > 2 ? (int?) arguments.ElementAt ( 2 ).Value : null;
 
-                        return new {
+                        return new MigrationClassModel {
                             Migration = a,
                             MigrationId = migrationId.Value != null ? (int) migrationId.Value : -1,
                             Description = description.Value != null ? (string) description.Value : "",
@@ -87,18 +97,20 @@ CREATE TABLE IF NOT EXISTS migrations(
                         };
                     }
                 )
+                .ToList ();
+        }
+
+        public async Task ApplyMigrations () {
+            await InitiateConnection ();
+            var appliedMigration = await GetAppliedMigrations ();
+            var migrations = GetMigrationClasses ()
                 .OrderBy ( a => a.MigrationId )
                 .ToList ();
+
             foreach ( var migrationEntry in migrations ) {
                 if ( appliedMigration.Contains ( migrationEntry.MigrationId ) ) continue;
 
-                var migrationType = migrationEntry.Migration;
-                var migrationInstance = Activator.CreateInstance ( migrationType );
-                if ( migrationInstance == null ) continue;
-                var migration = (Migration) migrationInstance;
-                migration.Apply ();
-
-                await using var migrationCommand = new NpgsqlCommand ( migration.GetSql (), m_connection, m_transaction );
+                await using var migrationCommand = new NpgsqlCommand ( migrationEntry.GetUpSql (), m_connection, m_transaction );
                 await migrationCommand.ExecuteNonQueryAsync ();
                 await CreateMigrationRecord ( migrationEntry.MigrationId, migrationEntry.Description, migrationEntry.Issue );
             }
@@ -106,16 +118,64 @@ CREATE TABLE IF NOT EXISTS migrations(
             await CloseConnection ();
         }
 
-        public Task RevertMigrations () {
-            throw new NotImplementedException ();
+        public async Task RevertMigrations () {
+            await InitiateConnection ();
+            var appliedMigration = await GetAppliedMigrations ();
+            var migrations = GetMigrationClasses ()
+                .OrderByDescending ( a => a.MigrationId )
+                .ToList ();
+
+            foreach ( var migrationEntry in migrations ) {
+                if ( !appliedMigration.Contains ( migrationEntry.MigrationId ) ) continue;
+
+                await using var migrationCommand = new NpgsqlCommand ( migrationEntry.GetDownSql (), m_connection, m_transaction );
+                await migrationCommand.ExecuteNonQueryAsync ();
+                await DeleteMigrationRecord ( migrationEntry.MigrationId );
+            }
+
+            await CloseConnection ();
         }
 
-        public Task RevertSingleMigration ( string id ) {
-            throw new NotImplementedException ();
+        public async Task RevertSingleMigration ( int id ) {
+            await InitiateConnection ();
+            var appliedMigration = await GetAppliedMigrations ();
+            var migrations = GetMigrationClasses ()
+                .OrderByDescending ( a => a.MigrationId )
+                .ToList ();
+
+            var migration = migrations.FirstOrDefault ( a => a.MigrationId == id );
+            if ( migration == null ) throw new ArgumentException ( $"Migration witn number {id} doesn't exists!" );
+
+            if ( appliedMigration.Contains ( id ) ) {
+                await using var migrationDownCommand = new NpgsqlCommand ( migration.GetDownSql (), m_connection, m_transaction );
+                await migrationDownCommand.ExecuteNonQueryAsync ();
+                await DeleteMigrationRecord ( migration.MigrationId );
+            }
+
+            await using var migrationUpCommand = new NpgsqlCommand ( migration.GetUpSql (), m_connection, m_transaction );
+            await migrationUpCommand.ExecuteNonQueryAsync ();
+            await CreateMigrationRecord ( migration.MigrationId, migration.Description, migration.Issue );
+
+            await CloseConnection ();
         }
 
-        public Task RevertToMigration ( string id ) {
-            throw new NotImplementedException ();
+        public async Task RevertToMigration ( int id ) {
+            await InitiateConnection ();
+            var appliedMigration = await GetAppliedMigrations ();
+            var migrations = GetMigrationClasses ()
+                .OrderByDescending ( a => a.MigrationId )
+                .ToList ();
+
+            foreach ( var migrationEntry in migrations ) {
+                if ( migrationEntry.MigrationId < id ) break;
+                if ( !appliedMigration.Contains ( migrationEntry.MigrationId )) continue;
+
+                await using var migrationCommand = new NpgsqlCommand ( migrationEntry.GetDownSql (), m_connection, m_transaction );
+                await migrationCommand.ExecuteNonQueryAsync ();
+                await DeleteMigrationRecord ( migrationEntry.MigrationId );
+            }
+
+            await CloseConnection ();
         }
 
         public void Dispose () {
