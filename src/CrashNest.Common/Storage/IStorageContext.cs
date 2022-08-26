@@ -18,6 +18,12 @@
         /// <param name="item">Item for saving process.</param>
         public Task AddOrUpdate<T> ( T item );
 
+        /// <summary>
+        /// Add or update items declared in generic type.
+        /// </summary>
+        /// <param name="item">Item collection for saving process.</param>
+        public Task MultiAddOrUpdate<T> ( IEnumerable<T> items );
+
     }
 
 }

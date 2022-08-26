@@ -9,7 +9,7 @@ namespace CrashNest.Common.RequestModels {
 
         public ErrorReport Report { get; init; } = new ErrorReport();
 
-        public ErrorReportMetadata Metadata { get; init; } = new ErrorReportMetadata();
+        public IEnumerable<ErrorReportMetadata> Metadata { get; init; } = Enumerable.Empty<ErrorReportMetadata>();
 
     }
 

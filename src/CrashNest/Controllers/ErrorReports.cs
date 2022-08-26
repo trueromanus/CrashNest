@@ -21,7 +21,14 @@ namespace CrashNest.Controllers {
 
             try {
                 model.Report.Id = Guid.Empty;
+
                 await m_storageContext.AddOrUpdate ( model.Report );
+
+                foreach ( var metadata in model.Metadata ) {
+                    metadata.ErrorReportId = model.Report.Id;
+                }
+                await m_storageContext.MultiAddOrUpdate ( model.Metadata );
+
                 return new ReportResultModel ( "", true );
             } catch ( Exception exception ) {
                 if ( exception is ArgumentException ) return new ReportResultModel ( exception.Message, false );
