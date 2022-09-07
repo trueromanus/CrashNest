@@ -22,6 +22,7 @@ namespace CrashNest.Controllers {
             await m_storageContext.AddOrUpdate ( model.Report );
 
             foreach ( var metadata in model.Metadata ) {
+                metadata.Id = Guid.Empty;
                 metadata.ErrorReportId = model.Report.Id;
             }
             await m_storageContext.MultiAddOrUpdate ( model.Metadata );
