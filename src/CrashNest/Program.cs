@@ -1,10 +1,29 @@
+using CrashNest.Middlewares;
 using CrashNest.Storage.Migrator;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using Serilog.Events;
+
+Log.Logger = new LoggerConfiguration ()
+#if DEBUG
+    .Enrich.FromLogContext ()
+    .MinimumLevel.Information ()
+    .WriteTo.Console ()
+#endif
+    .CreateBootstrapLogger ();
 
 await new Migrator ().ApplyMigrations ();
 
 var builder = WebApplication.CreateBuilder ( args );
 
+builder.Host.UseSerilog (
+#if !DEBUG
+    ( context, service, configuration ) =>
+        configuration
+            .ReadFrom.Configuration ( builder.Configuration )
+            .ReadFrom.Services ( service )
+#endif
+);
 builder.Services.AddControllers ();
 builder.Services.AddEndpointsApiExplorer ();
 builder.Services.AddSwaggerGen (
@@ -34,6 +53,10 @@ var app = builder.Build ();
 
 if ( !app.Environment.IsDevelopment () ) app.UseExceptionHandler ( "/Error" );
 
+app.UseMiddleware<LoggerMiddleware> ();
+
+app.UseSerilogRequestLogging ();
+
 app.UseStaticFiles ();
 
 app.UseSwagger ();
@@ -49,3 +72,5 @@ app.UseRouting ();
 app.MapControllers ();
 
 app.Run ();
+
+Log.CloseAndFlush ();

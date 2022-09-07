@@ -4,9 +4,8 @@ using Npgsql;
 using SqlKata;
 using SqlKata.Compilers;
 using System.Data;
-using System.Data.Common;
 using System.Reflection;
-using System.Transactions;
+using Microsoft.Extensions.Logging;
 
 namespace CrashNest.Storage.PostgresStorage {
 
@@ -36,7 +35,11 @@ namespace CrashNest.Storage.PostgresStorage {
 
         private NpgsqlConnection? m_connection;
 
-        private static async Task OpenConnection ( NpgsqlConnection connection ) {
+        private readonly ILogger<StorageContext> m_logger;
+
+        public StorageContext ( ILogger<StorageContext> logger ) => m_logger = logger;
+
+        private static async Task OpenConnection ( NpgsqlConnection connection) {
             await connection.OpenAsync ();
 
             if ( connection.FullState != ConnectionState.Open ) throw new Exception ( "Can't connecting to postgres database." );
@@ -124,6 +127,8 @@ namespace CrashNest.Storage.PostgresStorage {
         public async Task ExecuteNonResult ( string command, IDictionary<string, object> parameters ) {
             var connection = await GetConnection ();
 
+            m_logger.LogInformation ( $"SQL: {command}\n{string.Join ( ", ", parameters.Select ( a => a.Key + "=" + a.Value ) )}" );
+
             await using var cmd = m_transaction != null ? new NpgsqlCommand ( command, connection, m_transaction ) : new NpgsqlCommand ( command, connection );
             FillParameters ( parameters, cmd );
 
@@ -133,6 +138,8 @@ namespace CrashNest.Storage.PostgresStorage {
 
         private async Task<Guid> ExecuteWithSingleResultAsGuid ( string command, IDictionary<string, object> parameters ) {
             var connection = await GetConnection ();
+
+            m_logger.LogInformation ( $"SQL: {command}\n{string.Join ( ", ", parameters.Select ( a => a.Key + "=" + a.Value ) )}" );
 
             await using var cmd = new NpgsqlCommand ( command, connection );
             FillParameters ( parameters, cmd );
