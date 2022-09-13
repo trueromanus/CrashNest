@@ -1,16 +1,11 @@
-﻿namespace CrashNest.Common.Storage {
+﻿using SqlKata;
+
+namespace CrashNest.Common.Storage {
 
     /// <summary>
     /// Storage context.
     /// </summary>
     public interface IStorageContext {
-
-        /// <summary>
-        /// Execute non result command.
-        /// </summary>
-        /// <param name="command">Command as string.</param>
-        /// <param name="parameters">Parameters.</param>
-        public Task ExecuteNonResult ( string command, IDictionary<string, object> parameters );
 
         /// <summary>
         /// Add or update item declared in generic type.
@@ -23,6 +18,22 @@
         /// </summary>
         /// <param name="item">Item collection for saving process.</param>
         public Task MultiAddOrUpdate<T> ( IEnumerable<T> items );
+
+        /// <summary>
+        /// Get items from database.
+        /// </summary>
+        /// <typeparam name="T">Type of return model.</typeparam>
+        /// <param name="query">Query.</param>
+        /// <returns>Collection of items.</returns>
+        public Task<IEnumerable<T>> GetAsync<T> ( Query query ) where T : new();
+
+        /// <summary>
+        /// Get items from database.
+        /// </summary>
+        /// <typeparam name="T">Type of return model.</typeparam>
+        /// <param name="query">Query.</param>
+        /// <returns>Collection of items.</returns>
+        public IEnumerable<T> Get<T> ( Query query ) where T : new();
 
     }
 

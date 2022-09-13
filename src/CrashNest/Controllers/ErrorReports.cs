@@ -1,8 +1,9 @@
 ﻿using CrashNest.Attributes;
+using CrashNest.Common.Domain;
 using CrashNest.Common.RequestModels;
-using CrashNest.Common.ResponseModels;
 using CrashNest.Common.Storage;
 using Microsoft.AspNetCore.Mvc;
+using SqlKata;
 
 namespace CrashNest.Controllers {
 
@@ -13,8 +14,8 @@ namespace CrashNest.Controllers {
 
         public ErrorReports ( IStorageContext storageContext ) => m_storageContext = storageContext ?? throw new ArgumentNullException ( nameof ( storageContext ) );
 
-        [HttpPost ( "report" )]
-        public async Task<ReportResultModel> Save ( [FromBody, RequiredParameter] RegisterReportModel model ) {
+        [HttpPost ( "save" )]
+        public async Task Save ( [FromBody, RequiredParameter] RegisterReportModel model ) {
             if ( model == null ) throw new ArgumentNullException ( nameof ( model ) );
 
             model.Report.Id = Guid.Empty;
@@ -26,8 +27,15 @@ namespace CrashNest.Controllers {
                 metadata.ErrorReportId = model.Report.Id;
             }
             await m_storageContext.MultiAddOrUpdate ( model.Metadata );
+        }
 
-            return new ReportResultModel ( "", true );
+        [HttpPost ( "byfilter" )]
+        public async Task<IEnumerable<ErrorReport>> ByFilter ( [FromBody, RequiredParameter] ReportFilterListModel model ) {
+            if ( model == null ) throw new ArgumentNullException ( nameof ( model ) );
+
+            return await m_storageContext.GetAsync<ErrorReport> (
+                new Query ( nameof ( ErrorReport ) )
+            );
         }
 
     }

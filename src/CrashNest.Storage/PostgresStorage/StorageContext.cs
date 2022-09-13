@@ -112,8 +112,9 @@ namespace CrashNest.Storage.PostgresStorage {
 
             return (Guid) propertyValue;
         }
-        private async Task<NpgsqlConnection> GetConnection () {
-            NpgsqlConnection? connection = null;
+
+        private async Task<NpgsqlConnection> GetConnectionAsync () {
+            NpgsqlConnection? connection;
             if ( m_connection == null ) {
                 connection = new NpgsqlConnection ( m_connectionString );
                 await OpenConnection ( connection );
@@ -124,8 +125,21 @@ namespace CrashNest.Storage.PostgresStorage {
             return connection;
         }
 
+        private NpgsqlConnection GetConnection () {
+            NpgsqlConnection? connection;
+            if ( m_connection == null ) {
+                connection = new NpgsqlConnection ( m_connectionString );
+                connection.Open ();
+                if ( connection.FullState != ConnectionState.Open ) throw new Exception ( "Can't connecting to postgres database." );
+            } else {
+                connection = m_connection;
+            }
+
+            return connection;
+        }
+
         public async Task ExecuteNonResult ( string command, IDictionary<string, object> parameters ) {
-            var connection = await GetConnection ();
+            var connection = await GetConnectionAsync ();
 
             m_logger.LogInformation ( $"SQL: {command}\n{string.Join ( ", ", parameters.Select ( a => a.Key + "=" + a.Value ) )}" );
 
@@ -137,7 +151,7 @@ namespace CrashNest.Storage.PostgresStorage {
 
 
         private async Task<Guid> ExecuteWithSingleResultAsGuid ( string command, IDictionary<string, object> parameters ) {
-            var connection = await GetConnection ();
+            var connection = await GetConnectionAsync ();
 
             m_logger.LogInformation ( $"SQL: {command}\n{string.Join ( ", ", parameters.Select ( a => a.Key + "=" + a.Value ) )}" );
 
@@ -153,6 +167,70 @@ namespace CrashNest.Storage.PostgresStorage {
 
             return result;
         }
+
+        private static void SetPropertyInItem<T> ( T item, ref string property, ref object value) {
+            if ( item == null ) throw new ArgumentNullException ( nameof ( item ) );
+
+            var valueProperty = item.GetType().GetProperty(property, BindingFlags.IgnoreCase | BindingFlags.Instance | BindingFlags.Public );
+            if ( valueProperty == null ) throw new ArgumentException ( $"Method Get for Id property is incorrect in {item.GetType ().Name}!" );
+
+            try {
+                valueProperty.GetSetMethod()?.Invoke ( item, new object[] { value } );
+            } catch {
+                throw new ArgumentException ( $"Property {property} doesn't match types with value {value}!" );
+            }
+        }
+
+        private async Task<IEnumerable<T>> ExecuteWithResultAsCollectionAsync<T> ( string command, IDictionary<string, object> parameters ) where T: new() {
+            var connection = await GetConnectionAsync ();
+
+            m_logger.LogInformation ( $"SQL: {command}\n{string.Join ( ", ", parameters.Select ( a => a.Key + "=" + a.Value ) )}" );
+
+            await using var cmd = new NpgsqlCommand ( command, connection );
+            FillParameters ( parameters, cmd );
+
+            using var reader = await cmd.ExecuteReaderAsync ();
+            var result = new List<T> ();
+            while ( await reader.ReadAsync () ) {
+                var item = new T ();
+                var fieldsCount = reader.FieldCount;
+                for ( int i = 0; i < fieldsCount; i++ ) {
+                    var fieldName = reader.GetName ( i );
+                    var value = reader.GetValue ( i );
+                    SetPropertyInItem ( item, ref fieldName, ref value );
+                }
+                result.Add ( item );
+            }
+            await reader.CloseAsync ();
+
+            return result;
+        }
+
+        private IEnumerable<T> ExecuteWithResultAsCollection<T> ( string command, IDictionary<string, object> parameters ) where T : new() {
+            var connection = GetConnection ();
+
+            m_logger.LogInformation ( $"SQL: {command}\n{string.Join ( ", ", parameters.Select ( a => a.Key + "=" + a.Value ) )}" );
+
+            using var cmd = new NpgsqlCommand ( command, connection );
+            FillParameters ( parameters, cmd );
+
+            using var reader = cmd.ExecuteReader ();
+            var result = new List<T> ();
+            while ( reader.Read () ) {
+                var item = new T ();
+                var fieldsCount = reader.FieldCount;
+                for ( int i = 0; i < fieldsCount; i++ ) {
+                    var fieldName = reader.GetName ( i );
+                    var value = reader.GetValue ( i );
+                    SetPropertyInItem ( item, ref fieldName, ref value );
+                }
+                result.Add ( item );
+            }
+            reader.Close ();
+
+            return result;
+        }
+
 
         private async Task BeginTransaction () {
             m_connection = new NpgsqlConnection ( m_connectionString );
@@ -223,6 +301,20 @@ namespace CrashNest.Storage.PostgresStorage {
             }
 
             await CommitTransation ();
+        }
+
+        public async Task<IEnumerable<T>> GetAsync<T> ( Query query ) where T: new() {
+            if ( query == null ) throw new ArgumentNullException ( nameof ( query ) );
+
+            var compiledQuery = m_compilerWithoutBraces.Compile(query);
+            return await ExecuteWithResultAsCollectionAsync<T> ( compiledQuery.Sql, compiledQuery.NamedBindings );
+        }
+
+        public IEnumerable<T> Get<T> ( Query query ) where T : new() {
+            if ( query == null ) throw new ArgumentNullException ( nameof ( query ) );
+
+            var compiledQuery = m_compilerWithoutBraces.Compile ( query );
+            return ExecuteWithResultAsCollection<T> ( compiledQuery.Sql, compiledQuery.NamedBindings );
         }
 
     }
