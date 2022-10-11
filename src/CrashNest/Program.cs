@@ -2,7 +2,9 @@ using CrashNest.Middlewares;
 using CrashNest.Storage.Migrator;
 using Microsoft.OpenApi.Models;
 using Serilog;
+#if !DEBUG
 using Serilog.Events;
+#endif
 
 Log.Logger = new LoggerConfiguration ()
 #if DEBUG
@@ -12,7 +14,13 @@ Log.Logger = new LoggerConfiguration ()
 #endif
     .CreateBootstrapLogger ();
 
-await new Migrator ().ApplyMigrations ();
+var singleMigration = args.FirstOrDefault ( a => a.StartsWith ( "single-" ) );
+if ( singleMigration != null ) {
+    var migration = Convert.ToInt32 ( singleMigration.Replace ( "single-", "" ) );
+    if (migration > 0) await new Migrator ().RevertSingleMigration ( migration );
+} else {
+    await new Migrator ().ApplyMigrations ();
+}
 
 var builder = WebApplication.CreateBuilder ( args );
 

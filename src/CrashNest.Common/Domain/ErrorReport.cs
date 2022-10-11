@@ -30,6 +30,11 @@ namespace CrashNest.Common.Domain {
         /// </summary>
         public string StackTrace { get; set; } = "";
 
+        /// <summary>
+        /// Created timestamp.
+        /// </summary>
+        public DateTime Created { get; set; }
+
     }
 
 }

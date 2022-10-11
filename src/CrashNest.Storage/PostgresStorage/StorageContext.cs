@@ -44,10 +44,14 @@ namespace CrashNest.Storage.PostgresStorage {
 
             if ( connection.FullState != ConnectionState.Open ) throw new Exception ( "Can't connecting to postgres database." );
         }
+
         private static void FillParameters ( IDictionary<string, object> parameters, NpgsqlCommand cmd ) {
             if ( parameters != null ) {
                 foreach ( var parameter in parameters ) {
-                    cmd.Parameters.AddWithValue ( parameter.Key, parameter.Value );
+                    cmd.Parameters.AddWithValue (
+                        parameter.Key,
+                        parameter.Value is Enum ? Convert.ToInt32( parameter.Value ) : parameter.Value
+                    );
                 }
             }
         }
