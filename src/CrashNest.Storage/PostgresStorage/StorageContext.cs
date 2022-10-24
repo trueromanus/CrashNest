@@ -176,7 +176,7 @@ namespace CrashNest.Storage.PostgresStorage {
             if ( item == null ) throw new ArgumentNullException ( nameof ( item ) );
 
             var valueProperty = item.GetType().GetProperty(property, BindingFlags.IgnoreCase | BindingFlags.Instance | BindingFlags.Public );
-            if ( valueProperty == null ) throw new ArgumentException ( $"Method Get for Id property is incorrect in {item.GetType ().Name}!" );
+            if ( valueProperty == null ) throw new ArgumentException ( $"Method Get for {property} property is incorrect in {item.GetType ().Name}!" );
 
             if ( value == DBNull.Value ) value = null;
 
