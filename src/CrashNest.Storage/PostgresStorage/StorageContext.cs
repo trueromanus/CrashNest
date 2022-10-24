@@ -172,14 +172,16 @@ namespace CrashNest.Storage.PostgresStorage {
             return result;
         }
 
-        private static void SetPropertyInItem<T> ( T item, ref string property, ref object value) {
+        private static void SetPropertyInItem<T> ( T item, ref string property, ref object? value) {
             if ( item == null ) throw new ArgumentNullException ( nameof ( item ) );
 
             var valueProperty = item.GetType().GetProperty(property, BindingFlags.IgnoreCase | BindingFlags.Instance | BindingFlags.Public );
             if ( valueProperty == null ) throw new ArgumentException ( $"Method Get for Id property is incorrect in {item.GetType ().Name}!" );
 
+            if ( value == DBNull.Value ) value = null;
+
             try {
-                valueProperty.GetSetMethod()?.Invoke ( item, new object[] { value } );
+                valueProperty.GetSetMethod()?.Invoke ( item, new object?[] { value } );
             } catch {
                 throw new ArgumentException ( $"Property {property} doesn't match types with value {value}!" );
             }

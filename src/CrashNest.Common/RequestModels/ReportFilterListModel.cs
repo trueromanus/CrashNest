@@ -5,7 +5,7 @@ namespace CrashNest.Common.RequestModels {
     /// <summary>
     /// Report filters.
     /// </summary>
-    public class ReportFilterListModel {
+    public record ReportFilterListModel {
 
         public DateTime? StartDate { get; set; }
 
@@ -18,6 +18,10 @@ namespace CrashNest.Common.RequestModels {
         public string Message { get; set; } = "";
 
         public IEnumerable<int> Codes { get; set; } = Enumerable.Empty<int> ();
+
+        public IEnumerable<MetadataStringFilterModel> MetadataStringFilters { get; set; } = Enumerable.Empty<MetadataStringFilterModel> ();
+
+        public IEnumerable<MetadataNumberFilterModel> MetadataNumberFilters { get; set; } = Enumerable.Empty<MetadataNumberFilterModel> ();
 
     }
 

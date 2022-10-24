@@ -31,7 +31,7 @@ namespace CrashNest.Common.Domain {
         /// <summary>
         /// Error report identifier.
         /// </summary>
-        public Guid? ErrorReportId { get; set; }
+        public Guid ErrorReportId { get; set; }
 
     }
 

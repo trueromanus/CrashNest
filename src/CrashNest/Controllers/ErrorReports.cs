@@ -29,6 +29,17 @@ namespace CrashNest.Controllers {
             }
             await m_storageContext.MultiAddOrUpdate ( model.Metadata );
         }
+        private static void ApplyFilters ( ReportFilterListModel model, Query query ) {
+            FillDateRange ( model, query );
+            if ( model.Codes.Any () ) query.WhereIn ( "code", model.Codes );
+            if ( model.ErrorTypes.Any () ) query.WhereIn ( "errortype", model.ErrorTypes );
+            if ( !string.IsNullOrEmpty ( model.Message ) ) query.WhereLike ( "message", model.Message );
+
+            if ( FillStringMetadataFilters ( model, query ) || FillNumberMetadataFilters ( model, query ) ) {
+                query.Join ( "errorreportmetadata", "errorreportmetadata.errorreportid", "errorreport.id" );
+                query.SelectRaw ( "DISTINCT errorreport.*" );
+            }
+        }
 
         [HttpPost ( "byfilter" )]
         public async Task<IEnumerable<ErrorReport>> ByFilter ( [FromBody, RequiredParameter] ReportFilterListModel model ) {
@@ -36,12 +47,63 @@ namespace CrashNest.Controllers {
 
             var query = new Query ( nameof ( ErrorReport ) );
 
-            FillDateRange ( model, query );
-            if ( model.Codes.Any () ) query.WhereIn ( "code", model.Codes );
-            if ( model.ErrorTypes.Any () ) query.WhereIn ( "errortype", model.ErrorTypes );
-            if ( !string.IsNullOrEmpty ( model.Message ) ) query.WhereLike ( "message", model.Message );
+            ApplyFilters ( model, query );
 
             return await m_storageContext.GetAsync<ErrorReport> ( query );
+        }
+
+        [HttpPost ( "withmetadata/byfilter" )]
+        public async Task<IEnumerable<ErrorReportWithMetadataModel>> WithMetadataByFilter ( [FromBody, RequiredParameter] ReportFilterListWithMetadataModel model ) {
+            if ( model == null ) throw new ArgumentNullException ( nameof ( model ) );
+
+            var query = new Query ( nameof ( ErrorReport ) );
+            ApplyFilters ( model, query );
+            var reports = await m_storageContext.GetAsync<ErrorReportWithMetadataModel> ( query );
+
+            var metadataQuery = new Query ( nameof ( ErrorReportMetadata ) );
+            metadataQuery
+                .WhereIn ( "errorreportid", reports.Select ( a => a.Id ).ToList () )
+                .OrderBy ( "errorreportid" );
+            var metadata = await m_storageContext.GetAsync<ErrorReportMetadata> ( metadataQuery );
+
+            if ( metadata.Any () ) MapMetadataToReports ( model, reports, metadata );
+
+            return reports;
+        }
+
+        private static void MapMetadataToReports ( ReportFilterListWithMetadataModel model, IEnumerable<ErrorReportWithMetadataModel> reports, IEnumerable<ErrorReportMetadata> metadata ) {
+            Guid currentErrorReport = metadata.First ().ErrorReportId;
+            var report = reports.First ( a => a.Id == currentErrorReport );
+            var duplicatesDictionary = new Dictionary<string, uint> ();
+            var isNeedFilteringFields = model.IncludedFields?.Any () ?? false;
+            foreach ( var metadataItem in metadata ) {
+                if ( currentErrorReport != metadataItem.ErrorReportId ) {
+                    currentErrorReport = metadataItem.ErrorReportId;
+                    report = reports.First ( a => a.Id == currentErrorReport );
+                }
+
+                if ( isNeedFilteringFields && model.IncludedFields != null && !model.IncludedFields.Contains ( metadataItem.Name ) ) continue;
+
+                object? value = null;
+                if ( metadataItem.StringValue != null ) value = metadataItem.StringValue;
+                if ( metadataItem.IntValue != null ) value = metadataItem.IntValue;
+
+                if ( value != null ) {
+                    if ( report.Metadata.ContainsKey ( metadataItem.Name ) ) {
+                        var suffix = "";
+                        if ( duplicatesDictionary.TryGetValue ( metadataItem.Name, out var counts ) ) {
+                            duplicatesDictionary[metadataItem.Name] += 1;
+                            suffix = $"_{duplicatesDictionary[metadataItem.Name]}";
+                        } else {
+                            duplicatesDictionary[metadataItem.Name] = 1;
+                            suffix = "_1";
+                        }
+                        report.Metadata.Add ( metadataItem.Name + suffix, value );
+                    } else {
+                        report.Metadata.Add ( metadataItem.Name, value );
+                    }
+                }
+            }
         }
 
         private static void FillDateRange ( ReportFilterListModel model, Query query ) {
@@ -70,6 +132,42 @@ namespace CrashNest.Controllers {
                 }
             }
         }
+
+        private static bool FillStringMetadataFilters ( ReportFilterListModel model, Query query ) {
+            var hasFilters = false;
+            foreach ( var filter in model.MetadataStringFilters ) {
+                query
+                    .WhereLike ( "errorreportmetadata.name", filter.Name )
+                    .WhereLike ( "errorreportmetadata.stringvalue", filter.Value );
+                if ( !hasFilters ) hasFilters = true;
+            }
+
+            return hasFilters;
+        }
+
+        private static bool FillNumberMetadataFilters ( ReportFilterListModel model, Query query ) {
+            var hasFilters = false;
+
+            foreach ( var filter in model.MetadataNumberFilters ) {
+                if ( !( filter.Value.HasValue || filter.Start.HasValue && filter.End.HasValue ) ) continue;
+
+                query.WhereLike ( "errorreportmetadata.name", filter.Name );
+                if ( filter.Value.HasValue ) {
+                    query.Where ( "errorreportmetadata.intvalue", filter.Value.Value );
+
+                    if ( !hasFilters ) hasFilters = true;
+                }
+                if ( filter.Start.HasValue && filter.End.HasValue ) {
+                    query.Where ( "errorreportmetadata.intvalue", ">=", filter.Start.Value );
+                    query.Where ( "errorreportmetadata.intvalue", "<=", filter.End.Value );
+
+                    if ( !hasFilters ) hasFilters = true;
+                }
+            }
+
+            return hasFilters;
+        }
+
     }
 
 }
