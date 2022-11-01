@@ -35,6 +35,12 @@ namespace CrashNest.Common.Storage {
         /// <returns>Collection of items.</returns>
         public IEnumerable<T> Get<T> ( Query query ) where T : new();
 
+        /// <summary>
+        /// Make queries containing in `action` in single transaction.
+        /// </summary>
+        /// <param name="action">Action for transaction.</param>
+        public Task MakeInTransaction ( Func<Task> action );
+
     }
 
 }

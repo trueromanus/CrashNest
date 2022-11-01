@@ -1,6 +1,7 @@
 ﻿using CrashNest.Attributes;
 using CrashNest.Common.Domain;
 using CrashNest.Common.RequestModels;
+using CrashNest.Common.Services;
 using CrashNest.Common.Storage;
 using Microsoft.AspNetCore.Mvc;
 using SqlKata;
@@ -12,33 +13,33 @@ namespace CrashNest.Controllers {
 
         private readonly IStorageContext m_storageContext;
 
-        public ErrorReports ( IStorageContext storageContext ) => m_storageContext = storageContext ?? throw new ArgumentNullException ( nameof ( storageContext ) );
+        private readonly INotificationRuleService m_notificationRuleService;
+
+        public ErrorReports ( IStorageContext storageContext, INotificationRuleService notificationRuleService ) {
+            m_storageContext = storageContext ?? throw new ArgumentNullException ( nameof ( storageContext ) );
+            m_notificationRuleService = notificationRuleService ?? throw new ArgumentNullException ( nameof ( notificationRuleService ) );
+        }
 
         [HttpPost ( "save" )]
-        public async Task Save ( [FromBody, RequiredParameter] RegisterReportModel model ) {
+        public Task Save ( [FromBody, RequiredParameter] RegisterReportModel model ) {
             if ( model == null ) throw new ArgumentNullException ( nameof ( model ) );
 
-            model.Report.Id = Guid.Empty;
-            model.Report.Created = DateTime.UtcNow;
+            return m_storageContext.MakeInTransaction (
+                async () => {
+                    model.Report.Id = Guid.Empty;
+                    model.Report.Created = DateTime.UtcNow;
 
-            await m_storageContext.AddOrUpdate ( model.Report );
+                    await m_storageContext.AddOrUpdate ( model.Report );
 
-            foreach ( var metadata in model.Metadata ) {
-                metadata.Id = Guid.Empty;
-                metadata.ErrorReportId = model.Report.Id;
-            }
-            await m_storageContext.MultiAddOrUpdate ( model.Metadata );
-        }
-        private static void ApplyFilters ( ReportFilterListModel model, Query query ) {
-            FillDateRange ( model, query );
-            if ( model.Codes.Any () ) query.WhereIn ( "code", model.Codes );
-            if ( model.ErrorTypes.Any () ) query.WhereIn ( "errortype", model.ErrorTypes );
-            if ( !string.IsNullOrEmpty ( model.Message ) ) query.WhereLike ( "message", model.Message );
+                    foreach ( var metadata in model.Metadata ) {
+                        metadata.Id = Guid.Empty;
+                        metadata.ErrorReportId = model.Report.Id;
+                    }
+                    await m_storageContext.MultiAddOrUpdate ( model.Metadata );
 
-            if ( FillStringMetadataFilters ( model, query ) || FillNumberMetadataFilters ( model, query ) ) {
-                query.Join ( "errorreportmetadata", "errorreportmetadata.errorreportid", "errorreport.id" );
-                query.SelectRaw ( "DISTINCT errorreport.*" );
-            }
+                    await m_notificationRuleService.SendNotificationIfMetConditions ( model.Report, model.Metadata );
+                }
+            );
         }
 
         [HttpPost ( "byfilter" )]
@@ -69,6 +70,18 @@ namespace CrashNest.Controllers {
             if ( metadata.Any () ) MapMetadataToReports ( model, reports, metadata );
 
             return reports;
+        }
+
+        private static void ApplyFilters ( ReportFilterListModel model, Query query ) {
+            FillDateRange ( model, query );
+            if ( model.Codes.Any () ) query.WhereIn ( "code", model.Codes );
+            if ( model.ErrorTypes.Any () ) query.WhereIn ( "errortype", model.ErrorTypes );
+            if ( !string.IsNullOrEmpty ( model.Message ) ) query.WhereLike ( "message", model.Message );
+
+            if ( FillStringMetadataFilters ( model, query ) || FillNumberMetadataFilters ( model, query ) ) {
+                query.Join ( "errorreportmetadata", "errorreportmetadata.errorreportid", "errorreport.id" );
+                query.SelectRaw ( "DISTINCT errorreport.*" );
+            }
         }
 
         private static void MapMetadataToReports ( ReportFilterListWithMetadataModel model, IEnumerable<ErrorReportWithMetadataModel> reports, IEnumerable<ErrorReportMetadata> metadata ) {

@@ -6,6 +6,8 @@ using SqlKata.Compilers;
 using System.Data;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using NpgsqlTypes;
 
 namespace CrashNest.Storage.PostgresStorage {
 
@@ -22,6 +24,8 @@ namespace CrashNest.Storage.PostgresStorage {
 
     }
 
+    public record JsonData (string Json);
+
     /// <summary>
     /// Storage context for postgres database.
     /// </summary>
@@ -35,11 +39,13 @@ namespace CrashNest.Storage.PostgresStorage {
 
         private NpgsqlConnection? m_connection;
 
+        private bool m_groupedTransaction;
+
         private readonly ILogger<StorageContext> m_logger;
 
         public StorageContext ( ILogger<StorageContext> logger ) => m_logger = logger;
 
-        private static async Task OpenConnection ( NpgsqlConnection connection) {
+        private static async Task OpenConnection ( NpgsqlConnection connection ) {
             await connection.OpenAsync ();
 
             if ( connection.FullState != ConnectionState.Open ) throw new Exception ( "Can't connecting to postgres database." );
@@ -48,9 +54,17 @@ namespace CrashNest.Storage.PostgresStorage {
         private static void FillParameters ( IDictionary<string, object> parameters, NpgsqlCommand cmd ) {
             if ( parameters != null ) {
                 foreach ( var parameter in parameters ) {
+                    if (parameter.Value is JsonData ) {
+                        cmd.Parameters.AddWithValue (
+                            parameter.Key,
+                            NpgsqlDbType.Jsonb,
+                            ((JsonData) parameter.Value).Json
+                        );
+                        continue;
+                    }
                     cmd.Parameters.AddWithValue (
                         parameter.Key,
-                        parameter.Value is Enum ? Convert.ToInt32( parameter.Value ) : parameter.Value
+                        parameter.Value is Enum ? Convert.ToInt32 ( parameter.Value ) : parameter.Value
                     );
                 }
             }
@@ -69,7 +83,19 @@ namespace CrashNest.Storage.PostgresStorage {
                 if ( value == null ) {
                     values[key] = DBNull.Value;
                 } else {
-                    values[key] = value is Enum ? Convert.ToInt32 ( value ) : value;
+                    if ( property.PropertyType?.IsClass == true && property.PropertyType?.FullName?.StartsWith( "CrashNest." ) == true ) {
+                        values[key] = new JsonData (
+                            JsonSerializer.Serialize (
+                                value,
+                                property.PropertyType,
+                                new JsonSerializerOptions {
+                                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                                }
+                            )
+                        );
+                    } else {
+                        values[key] = value is Enum ? Convert.ToInt32 ( value ) : value;
+                    }
                 }
                 iterator++;
             }
@@ -172,22 +198,37 @@ namespace CrashNest.Storage.PostgresStorage {
             return result;
         }
 
-        private static void SetPropertyInItem<T> ( T item, ref string property, ref object? value) {
+        private static void SetPropertyInItem<T> ( T item, ref string property, ref object? value, bool isJsonb = false ) {
             if ( item == null ) throw new ArgumentNullException ( nameof ( item ) );
 
-            var valueProperty = item.GetType().GetProperty(property, BindingFlags.IgnoreCase | BindingFlags.Instance | BindingFlags.Public );
+            var valueProperty = item.GetType ().GetProperty ( property, BindingFlags.IgnoreCase | BindingFlags.Instance | BindingFlags.Public );
             if ( valueProperty == null ) throw new ArgumentException ( $"Method Get for {property} property is incorrect in {item.GetType ().Name}!" );
 
             if ( value == DBNull.Value ) value = null;
 
             try {
-                valueProperty.GetSetMethod()?.Invoke ( item, new object?[] { value } );
+                if ( isJsonb ) {
+                    var json = value == null ? "null" : (value.ToString () ?? "null");
+                    var jsonObject = JsonSerializer.Deserialize (
+                        json,
+                        valueProperty.PropertyType,
+                        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
+                    );
+                    valueProperty.GetSetMethod ()?.Invoke ( item, new object?[] { jsonObject } );
+                    return;
+                }
+
+                valueProperty.GetSetMethod ()?.Invoke ( item, new object?[] { value } );
             } catch {
                 throw new ArgumentException ( $"Property {property} doesn't match types with value {value}!" );
             }
         }
 
-        private async Task<IEnumerable<T>> ExecuteWithResultAsCollectionAsync<T> ( string command, IDictionary<string, object> parameters ) where T: new() {
+        private bool isJsonb ( NpgsqlDataReader reader, int index ) {
+            return reader.GetDataTypeName ( index ) == "jsonb";
+        }
+
+        private async Task<IEnumerable<T>> ExecuteWithResultAsCollectionAsync<T> ( string command, IDictionary<string, object> parameters ) where T : new() {
             var connection = await GetConnectionAsync ();
 
             m_logger.LogInformation ( $"SQL: {command}\n{string.Join ( ", ", parameters.Select ( a => a.Key + "=" + a.Value ) )}" );
@@ -203,7 +244,7 @@ namespace CrashNest.Storage.PostgresStorage {
                 for ( int i = 0; i < fieldsCount; i++ ) {
                     var fieldName = reader.GetName ( i );
                     var value = reader.GetValue ( i );
-                    SetPropertyInItem ( item, ref fieldName, ref value );
+                    SetPropertyInItem ( item, ref fieldName, ref value, isJsonb ( reader, i ) );
                 }
                 result.Add ( item );
             }
@@ -228,7 +269,7 @@ namespace CrashNest.Storage.PostgresStorage {
                 for ( int i = 0; i < fieldsCount; i++ ) {
                     var fieldName = reader.GetName ( i );
                     var value = reader.GetValue ( i );
-                    SetPropertyInItem ( item, ref fieldName, ref value );
+                    SetPropertyInItem ( item, ref fieldName, ref value, isJsonb ( reader, i ) );
                 }
                 result.Add ( item );
             }
@@ -238,15 +279,19 @@ namespace CrashNest.Storage.PostgresStorage {
         }
 
 
-        private async Task BeginTransaction () {
+        private async Task BeginTransaction ( bool groupedTransaction = false ) {
+            if ( !( m_connection == null && m_transaction == null ) ) return; // if transaction already started not need make new transaction
+
             m_connection = new NpgsqlConnection ( m_connectionString );
             await OpenConnection ( m_connection );
 
             m_transaction = await m_connection.BeginTransactionAsync ();
+            m_groupedTransaction = groupedTransaction;
         }
 
-        private async Task CommitTransation () {
+        private async Task CommitTransation ( bool groupedTransaction = false ) {
             if ( m_transaction == null ) return;
+            if ( m_groupedTransaction == true && !groupedTransaction ) return;
 
             await m_transaction.CommitAsync ();
             await m_transaction.DisposeAsync ();
@@ -309,10 +354,10 @@ namespace CrashNest.Storage.PostgresStorage {
             await CommitTransation ();
         }
 
-        public async Task<IEnumerable<T>> GetAsync<T> ( Query query ) where T: new() {
+        public async Task<IEnumerable<T>> GetAsync<T> ( Query query ) where T : new() {
             if ( query == null ) throw new ArgumentNullException ( nameof ( query ) );
 
-            var compiledQuery = m_compilerWithoutBraces.Compile(query);
+            var compiledQuery = m_compilerWithoutBraces.Compile ( query );
             return await ExecuteWithResultAsCollectionAsync<T> ( compiledQuery.Sql, compiledQuery.NamedBindings );
         }
 
@@ -321,6 +366,14 @@ namespace CrashNest.Storage.PostgresStorage {
 
             var compiledQuery = m_compilerWithoutBraces.Compile ( query );
             return ExecuteWithResultAsCollection<T> ( compiledQuery.Sql, compiledQuery.NamedBindings );
+        }
+
+        public async Task MakeInTransaction ( Func<Task> action ) {
+            await BeginTransaction ( groupedTransaction: true );
+
+            await action ();
+
+            await CommitTransation ( groupedTransaction: true );
         }
 
     }
