@@ -13,6 +13,7 @@ public static class ServiceRegistration {
     public static void RegistrateServices ( IServiceCollection services ) {
         services.AddScoped<IStorageContext, StorageContext> ();
         services.AddScoped<INotificationRuleService, NotificationRuleService> ();
+        services.AddScoped<INotificationService, NotificationService> ();
     }
 
 }
