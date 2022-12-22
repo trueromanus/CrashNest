@@ -224,9 +224,7 @@ namespace CrashNest.Storage.PostgresStorage {
             }
         }
 
-        private bool isJsonb ( NpgsqlDataReader reader, int index ) {
-            return reader.GetDataTypeName ( index ) == "jsonb";
-        }
+        private static bool IsJsonb ( NpgsqlDataReader reader, int index ) => reader.GetDataTypeName ( index ) == "jsonb";
 
         private async Task<IEnumerable<T>> ExecuteWithResultAsCollectionAsync<T> ( string command, IDictionary<string, object> parameters ) where T : new() {
             var connection = await GetConnectionAsync ();
@@ -244,7 +242,7 @@ namespace CrashNest.Storage.PostgresStorage {
                 for ( int i = 0; i < fieldsCount; i++ ) {
                     var fieldName = reader.GetName ( i );
                     var value = reader.GetValue ( i );
-                    SetPropertyInItem ( item, ref fieldName, ref value, isJsonb ( reader, i ) );
+                    SetPropertyInItem ( item, ref fieldName, ref value, IsJsonb ( reader, i ) );
                 }
                 result.Add ( item );
             }
@@ -269,7 +267,7 @@ namespace CrashNest.Storage.PostgresStorage {
                 for ( int i = 0; i < fieldsCount; i++ ) {
                     var fieldName = reader.GetName ( i );
                     var value = reader.GetValue ( i );
-                    SetPropertyInItem ( item, ref fieldName, ref value, isJsonb ( reader, i ) );
+                    SetPropertyInItem ( item, ref fieldName, ref value, IsJsonb ( reader, i ) );
                 }
                 result.Add ( item );
             }
