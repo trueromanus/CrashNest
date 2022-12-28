@@ -8,6 +8,7 @@ using System.Reflection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using NpgsqlTypes;
+using CrashNest.Common.Services;
 
 namespace CrashNest.Storage.PostgresStorage {
 
@@ -33,7 +34,7 @@ namespace CrashNest.Storage.PostgresStorage {
 
         private static readonly PostgresCompilerWithoutBraces m_compilerWithoutBraces = new ();
 
-        private readonly string m_connectionString = "Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=test";
+        private readonly string m_connectionString = "";
 
         private NpgsqlTransaction? m_transaction;
 
@@ -43,7 +44,13 @@ namespace CrashNest.Storage.PostgresStorage {
 
         private readonly ILogger<StorageContext> m_logger;
 
-        public StorageContext ( ILogger<StorageContext> logger ) => m_logger = logger;
+        private readonly IConfigurationService m_configurationService;
+
+        public StorageContext ( ILogger<StorageContext> logger, IConfigurationService configurationService ) {
+            m_logger = logger;
+            m_configurationService = configurationService ?? throw new ArgumentNullException ( nameof ( configurationService ) );
+            m_connectionString = m_configurationService.DatabaseConnectionString ();
+        }
 
         private static async Task OpenConnection ( NpgsqlConnection connection ) {
             await connection.OpenAsync ();

@@ -14,6 +14,7 @@ public static class ServiceRegistration {
         services.AddScoped<IStorageContext, StorageContext> ();
         services.AddScoped<INotificationRuleService, NotificationRuleService> ();
         services.AddScoped<INotificationService, NotificationService> ();
+        services.AddScoped<IConfigurationService, ConfigurationService> ();
     }
 
 }

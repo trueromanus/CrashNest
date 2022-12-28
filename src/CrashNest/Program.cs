@@ -1,3 +1,4 @@
+using CrashNest.Common.Models;
 using CrashNest.Middlewares;
 using CrashNest.Storage.Migrator;
 using Microsoft.OpenApi.Models;
@@ -32,6 +33,7 @@ builder.Host.UseSerilog (
             .ReadFrom.Services ( service )
 #endif
 );
+builder.Services.Configure<ApplicationSettingsModel> ( builder.Configuration.GetSection ( key: "ApplicationSettings" ) );
 builder.Services.AddControllers ();
 builder.Services.AddEndpointsApiExplorer ();
 builder.Services.AddSwaggerGen (
