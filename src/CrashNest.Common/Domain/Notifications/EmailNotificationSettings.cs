@@ -13,6 +13,10 @@
 
         public string? Password { get; init; }
 
+        public bool Secure { get; init; }
+
+        public string FromAddress { get; init; } = "";
+
         public int Timeout { get; init; }
 
     }

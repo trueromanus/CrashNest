@@ -51,9 +51,7 @@ namespace CrashNest.Services {
                     }
                 }
 
-                // rule.SendSettings > NotificationOptions
-
-                if ( isMet ) await m_notificationService.SendNotification ( "", new List<NotificationOptions> () );
+                if ( isMet && rule.SendSettings != null ) await m_notificationService.SendNotification ( "Lalalla", rule.SendSettings.Options, false );
             }
         }
 

@@ -12,8 +12,8 @@ namespace CrashNest.Common.Services {
         /// </summary>
         /// <param name="content">Content for notification.</param>
         /// <param name="options">Options for sending.</param>
-        /// <returns></returns>
-        Task SendNotification (string content, IEnumerable<NotificationOptions> options);
+        /// <param name="urgent">Is urgent notification.</param>
+        Task SendNotification (string content, IEnumerable<NotificationOptions> options, bool urgent);
 
     }
 
